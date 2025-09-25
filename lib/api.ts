@@ -222,6 +222,20 @@ export class ApiService {
     return data.map(mapApiAlimentoToUi);
   }
 
+  static async buscarAlimentosPorNombre(nombre: string, limit = 50, offset = 0): Promise<Alimento[]> {
+    const params = new URLSearchParams({
+      nombre,
+      limit: limit.toString(),
+      offset: offset.toString()
+    });
+    
+    const endpoint = `/buscar_alimento?${params.toString()}`;
+    const data = await request<AlimentoApi[]>(endpoint, { method: "GET" });
+    
+    if (!Array.isArray(data)) return [];
+    return data.map(mapApiAlimentoToUi);
+  }
+
   static async crearAlimento(alimento: Partial<AlimentoApi>): Promise<Alimento> {
     const data = await request<AlimentoApi>("/alimento", {
       method: "POST",

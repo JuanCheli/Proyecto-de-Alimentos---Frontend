@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -66,34 +66,60 @@ export default function RecetasPage() {
   const [busquedaIngrediente, setBusquedaIngrediente] = useState("")
   const [recetaGenerada, setRecetaGenerada] = useState<RecetaGenerada | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [alimentosDisponibles, setAlimentosDisponibles] = useState<Alimento[]>([])
-  const [isLoadingAlimentos, setIsLoadingAlimentos] = useState(false)
+  const [alimentosEncontrados, setAlimentosEncontrados] = useState<Alimento[]>([])
+  const [isBuscando, setIsBuscando] = useState(false)
+  const [timeoutId, setTimeoutId] = useState<NodeJS.Timeout | null>(null)
 
-  useEffect(() => {
-    const cargarAlimentos = async () => {
-      setIsLoadingAlimentos(true)
-      try {
-        const alimentos = await ApiService.getAlimentos(100, 0)
-        setAlimentosDisponibles(alimentos)
-      } catch (error) {
-        console.error("Error cargando alimentos:", error)
-      } finally {
-        setIsLoadingAlimentos(false)
-      }
+  const buscarAlimentos = async (termino: string) => {
+    if (!termino || termino.length < 2) {
+      setAlimentosEncontrados([])
+      return
     }
 
-    cargarAlimentos()
-  }, [])
+    setIsBuscando(true)
+    try {
+      const alimentos = await ApiService.buscarAlimentosPorNombre(termino, 10, 0)
+      setAlimentosEncontrados(alimentos)
+    } catch (error) {
+      console.error("Error buscando alimentos:", error)
+      setAlimentosEncontrados([])
+    } finally {
+      setIsBuscando(false)
+    }
+  }
 
-  const alimentosFiltrados = alimentosDisponibles.filter(
+  const manejarCambioBusqueda = (valor: string) => {
+    setBusquedaIngrediente(valor)
+
+    // Limpiar timeout anterior si existe
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+    }
+
+    // Si el input está vacío o muy corto, limpiar resultados inmediatamente
+    if (!valor || valor.length < 2) {
+      setAlimentosEncontrados([])
+      setIsBuscando(false)
+      return
+    }
+
+    // Configurar nuevo timeout para buscar después de 500ms
+    const nuevoTimeoutId = setTimeout(() => {
+      buscarAlimentos(valor)
+    }, 500)
+
+    setTimeoutId(nuevoTimeoutId)
+  }
+
+  const alimentosFiltrados = alimentosEncontrados.filter(
     (alimento) =>
-      alimento.nombre.toLowerCase().includes(busquedaIngrediente.toLowerCase()) &&
-      !ingredientesSeleccionados.some((ing) => ing.alimento.codigomex2 === alimento.codigomex2),
+      !ingredientesSeleccionados.some((ing) => ing.alimento.codigomex2 === alimento.codigomex2)
   )
 
   const agregarIngrediente = (alimento: Alimento) => {
     setIngredientesSeleccionados((prev) => [...prev, { alimento, cantidad: 100 }])
     setBusquedaIngrediente("")
+    setAlimentosEncontrados([])
   }
 
   const removerIngrediente = (codigomex2: number) => {
@@ -244,6 +270,7 @@ export default function RecetasPage() {
     setIngredientesSeleccionados([])
     setRecetaGenerada(null)
     setBusquedaIngrediente("")
+    setAlimentosEncontrados([])
   }
 
   return (
@@ -294,14 +321,14 @@ export default function RecetasPage() {
                   <Input
                     placeholder="Ej: pollo, aceite..."
                     value={busquedaIngrediente}
-                    onChange={(e) => setBusquedaIngrediente(e.target.value)}
-                    disabled={isLoadingAlimentos}
+                    onChange={(e) => manejarCambioBusqueda(e.target.value)}
+                    disabled={isBuscando}
                   />
 
-                  {isLoadingAlimentos && (
+                  {isBuscando && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Cargando alimentos...
+                      Buscando alimentos...
                     </div>
                   )}
 
@@ -319,6 +346,12 @@ export default function RecetasPage() {
                           </div>
                         </button>
                       ))}
+                    </div>
+                  )}
+
+                  {busquedaIngrediente && busquedaIngrediente.length >= 2 && alimentosFiltrados.length === 0 && !isBuscando && (
+                    <div className="text-sm text-muted-foreground text-center py-2">
+                      No se encontraron alimentos con "{busquedaIngrediente}"
                     </div>
                   )}
                 </div>
@@ -406,23 +439,8 @@ export default function RecetasPage() {
                   </div>
                   <h3 className="text-lg font-semibold mb-2">Crea tu primera receta</h3>
                   <p className="text-muted-foreground mb-4">
-                    Selecciona al menos un ingrediente para generar una receta personalizada
+                    Escribe en el buscador para encontrar ingredientes (ej: "pollo", "arroz", "tomate")
                   </p>
-                  {!isLoadingAlimentos && alimentosDisponibles.length > 0 && (
-                    <div className="flex flex-wrap gap-2 justify-center">
-                      {alimentosDisponibles.slice(0, 4).map((alimento) => (
-                        <Button
-                          key={alimento.codigomex2}
-                          variant="outline"
-                          size="sm"
-                          onClick={() => agregarIngrediente(alimento)}
-                          className="text-xs"
-                        >
-                          + {alimento.nombre}
-                        </Button>
-                      ))}
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             ) : (
